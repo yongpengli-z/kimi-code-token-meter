@@ -123,7 +123,13 @@ def session_by_id(home, session_id):
 def active_session(home):
     tracked = read_json(runtime_dir(home) / "active-session.json")
     session_id = tracked.get("session_id") if isinstance(tracked, dict) else None
-    return session_by_id(home, session_id) or newest_session(home)
+    updated_at = number(tracked.get("updated_at")) if isinstance(tracked, dict) else 0.0
+    age_ms = time.time() * 1000.0 - updated_at
+    if 0 <= age_ms < 30000:
+        selected = session_by_id(home, session_id)
+        if selected is not None:
+            return selected
+    return newest_session(home)
 
 
 def number(value):
@@ -456,10 +462,9 @@ def serve(home, idle_timeout):
 
 
 def dashboard_url(home, base_url):
-    tracked = read_json(runtime_dir(home) / "active-session.json")
-    session_id = tracked.get("session_id") if isinstance(tracked, dict) else None
-    if session_by_id(home, session_id) is not None:
-        return base_url + "?session=" + session_id
+    session = newest_session(home)
+    if session is not None and valid_session_id(session.name):
+        return base_url + "?session=" + session.name
     return base_url
 
 

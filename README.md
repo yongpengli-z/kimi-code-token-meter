@@ -21,13 +21,15 @@ https://github.com/yongpengli-z/kimi-code-token-meter
 
 也可以在会话中执行 `/plugins install https://github.com/yongpengli-z/kimi-code-token-meter`。
 
-安装后执行 `/reload`，然后运行：
+安装或更新后执行 `/reload`（也可以新建会话），然后直接对 Kimi 说：
 
 ```text
-/kimi-code-token-meter:show
+打开看板
 ```
 
-插件命令会启动本地服务，并在 App 的内置浏览器面板中打开看板。如果安装后没有立即出现命令，请新建会话后再试。
+插件的 sessionStart Skill 会在每个正式会话中提供打开指令，并在 App 的内置浏览器面板中显示看板，不依赖斜杠命令补全列表。
+
+如果客户端支持插件斜杠命令，也可以运行 `/kimi-code-token-meter:show`。部分 Kimi Code App 版本不显示该命令，此时使用上面的自然语言方式。
 
 当前在 macOS + Kimi Code Desktop 上开发和验证；需要 `python3`（或 `python`）可用。它不是 CLI 底部状态栏，也不会修改 `config.toml` 或 `tui.toml`。
 
@@ -53,8 +55,7 @@ inputCacheRead / (inputCacheRead + inputCacheCreation + inputOther) × 100%
 
 插件从 `$KIMI_CODE_HOME`（默认 `~/.kimi-code`）读取以下信息：
 
-- hook stdin 中的 `session_id`，用于定位当前会话。
-- 当前会话 `agents/*/wire.jsonl` 中的 `llm.request` 和 turn 级 `usage.record`。
+- 最近活跃会话 `agents/*/wire.jsonl` 中的 `llm.request` 和 turn 级 `usage.record`，用于计算指标并在打开看板时绑定会话。
 
 页面和 API 只返回聚合指标及 session id，不返回提示词、回复、工具输出或代码。运行状态保存在 `$KIMI_CODE_HOME/kimi-code-token-meter/`，看板服务不对局域网或公网开放。
 
