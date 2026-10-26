@@ -6,6 +6,7 @@
 
 - 显示最近完成请求的平均输出速度，单位为 `token/s`。
 - 显示当前会话累计缓存命中率，包含主 Agent 和子 Agent。
+- 以表格展示最近 100 次请求的时间、Agent、模型、输入输出、缓存读取、速度和总耗时。
 - 每秒自动刷新；每个看板绑定发起命令的会话，并行窗口互不干扰。
 - 只读取本地用量元数据，不上传对话、代码或凭据。
 - 仅监听 `127.0.0.1`；连续 15 分钟没有访问后自动停止。
@@ -51,13 +52,24 @@ inputCacheRead / (inputCacheRead + inputCacheCreation + inputOther) × 100%
 
 统计范围为当前会话中的 turn 级 `usage.record`，包含主 Agent 和全部子 Agent。没有输入数据时显示 `--`。
 
+### 请求明细
+
+表格按完成时间倒序展示最近 100 次请求，并区分 `main` 和 `agent-N`：
+
+- 未缓存输入：`inputOther + inputCacheCreation`。
+- 缓存读取：`inputCacheRead`。
+- 总耗时：`usage.record.time - 对应的 llm.request.time`。
+- 速度：输出 token 除以总耗时。
+
+无法配对请求时间的记录，速度和总耗时显示 `--`。现有日志没有可靠计费信息和逐 token 流式时间戳，因此不展示成本或首字时间。
+
 ## 数据与隐私
 
 插件从 `$KIMI_CODE_HOME`（默认 `~/.kimi-code`）读取以下信息：
 
 - 最近活跃会话 `agents/*/wire.jsonl` 中的 `llm.request` 和 turn 级 `usage.record`，用于计算指标并在打开看板时绑定会话。
 
-页面和 API 只返回聚合指标及 session id，不返回提示词、回复、工具输出或代码。运行状态保存在 `$KIMI_CODE_HOME/kimi-code-token-meter/`，看板服务不对局域网或公网开放。
+页面和 API 只返回请求级用量元数据、聚合指标及 session id，不返回提示词、回复、工具输出或代码。运行状态保存在 `$KIMI_CODE_HOME/kimi-code-token-meter/`，看板服务不对局域网或公网开放。
 
 ## 调试
 

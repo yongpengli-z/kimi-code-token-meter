@@ -23,7 +23,7 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    main { width: min(860px, 100%); margin: 0 auto; padding: 42px 24px 28px; }
+    main { width: min(1100px, 100%); margin: 0 auto; padding: 42px 24px 28px; }
     header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
     h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
     header span { color: var(--muted); font-size: 13px; }
@@ -48,6 +48,19 @@
     .dot.busy { background: #f7c873; box-shadow: 0 0 12px #f7c87366; }
     .dot.error { background: #ff8f8f; box-shadow: none; }
     .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 11px; color: var(--muted); font-size: 12px; }
+    .details-panel { margin-top: 20px; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: #111620; }
+    .details-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--border); }
+    .details-heading h2 { margin: 0; font-size: 15px; }
+    .details-heading span { color: var(--muted); font-size: 11px; }
+    .table-scroll { max-height: 520px; overflow: auto; }
+    table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid #232b3a; text-align: right; white-space: nowrap; }
+    th { position: sticky; top: 0; z-index: 1; background: #171d29; color: var(--muted); font-weight: 500; }
+    th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #ffffff05; }
+    td.model { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .empty { padding: 28px 18px; color: var(--muted); text-align: center; font-size: 13px; }
     footer { margin-top: 18px; color: #727d91; font-size: 11px; line-height: 1.7; }
     @media (max-width: 620px) {
       main { padding: 28px 16px 20px; }
@@ -84,12 +97,23 @@
         <span id="tokens">0 输出 token</span>
       </div>
     </section>
+    <section class="details-panel" aria-label="请求明细">
+      <div class="details-heading"><h2>请求明细</h2><span>最近 100 条 · 按完成时间倒序</span></div>
+      <div class="table-scroll" id="details-scroll" hidden>
+        <table>
+          <thead><tr><th>时间</th><th>Agent</th><th>模型</th><th>未缓存输入</th><th>缓存读取</th><th>输出</th><th>速度</th><th>总耗时</th></tr></thead>
+          <tbody id="request-details"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="details-empty">正在读取请求明细…</div>
+    </section>
     <footer>仅在本机读取 Kimi Code 用量元数据，不上传对话或代码。<br>页面每秒刷新；连续 15 分钟无访问后，本地服务自动停止。</footer>
   </main>
   <script>
     const byId = id => document.getElementById(id);
     const integer = new Intl.NumberFormat("zh-CN");
     let refreshing = false;
+    let detailsKey = "";
 
     function setStatus(text, state) {
       byId("status").textContent = text;
@@ -97,7 +121,56 @@
     }
 
     function timeOf(milliseconds) {
-      return new Date(milliseconds).toLocaleTimeString("zh-CN", { hour12: false });
+      return milliseconds ? new Date(milliseconds).toLocaleTimeString("zh-CN", { hour12: false }) : "--";
+    }
+
+    function modelName(value) {
+      if (!value) return "--";
+      const parts = value.split("/");
+      return parts[parts.length - 1];
+    }
+
+    function speedOf(value) {
+      return value == null ? "--" : `${value.toFixed(1)} tok/s`;
+    }
+
+    function durationOf(value) {
+      return value == null ? "--" : `${(value / 1000).toFixed(1)}s`;
+    }
+
+    function renderDetails(data) {
+      const key = `${data.sessionId}:${data.requestCount}:${data.lastUsageTime}`;
+      if (key === detailsKey) return;
+      detailsKey = key;
+      const records = Array.isArray(data.recentRequests) ? data.recentRequests : [];
+      const fragment = document.createDocumentFragment();
+      for (const record of records) {
+        const row = document.createElement("tr");
+        const values = [
+          timeOf(record.time),
+          record.agentId || "--",
+          modelName(record.model),
+          integer.format(record.uncachedInputTokens ?? 0),
+          integer.format(record.cacheReadTokens ?? 0),
+          integer.format(record.outputTokens ?? 0),
+          speedOf(record.speedTokensPerSecond),
+          durationOf(record.durationMs),
+        ];
+        values.forEach((value, index) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          if (index === 2) {
+            cell.className = "model";
+            cell.title = record.model || "";
+          }
+          row.appendChild(cell);
+        });
+        fragment.appendChild(row);
+      }
+      byId("request-details").replaceChildren(fragment);
+      byId("details-scroll").hidden = records.length === 0;
+      byId("details-empty").hidden = records.length > 0;
+      byId("details-empty").textContent = data.sessionFound ? "暂无请求明细" : "未发现会话";
     }
 
     async function refresh() {
@@ -114,6 +187,7 @@
         byId("session").textContent = data.sessionId ? `会话 …${data.sessionId.slice(-10)}` : "未发现会话";
         byId("requests").textContent = `${integer.format(data.requestCount)} 次请求`;
         byId("tokens").textContent = `${integer.format(data.outputTokens)} 输出 token`;
+        renderDetails(data);
         if (data.generating) {
           setStatus("模型生成中 · 速度将在本次请求完成后更新", "busy");
         } else if (data.lastUsageTime) {

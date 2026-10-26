@@ -13,9 +13,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 PLUGIN_ID = "kimi-code-token-meter"
-VERSION = "1.0.0"
+VERSION = "1.2.0"
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
 DEFAULT_IDLE_TIMEOUT = 15 * 60
+RECENT_REQUEST_LIMIT = 100
+REQUEST_HISTORY_RETENTION = 500
 
 
 def kimi_home():
@@ -147,6 +149,7 @@ class LogTruncated(Exception):
 class WireTail:
     def __init__(self, path):
         self.path = path
+        self.agent_id = path.parent.name
         self.offset = 0
         self.buffer = b""
         self.pending_request_ms = None
@@ -157,7 +160,7 @@ class WireTail:
             if size < self.offset:
                 raise LogTruncated(str(self.path))
             if size == self.offset:
-                self._process_buffered(metrics, final=False)
+                self._process_buffered(metrics)
                 return
             with self.path.open("rb") as handle:
                 handle.seek(self.offset)
@@ -170,9 +173,9 @@ class WireTail:
         self.buffer = lines.pop()
         for line in lines:
             self._process_line(line, metrics)
-        self._process_buffered(metrics, final=False)
+        self._process_buffered(metrics)
 
-    def _process_buffered(self, metrics, final):
+    def _process_buffered(self, metrics):
         if not self.buffer:
             return
         if b"llm.request" not in self.buffer and b"usage.record" not in self.buffer:
@@ -206,6 +209,7 @@ class WireTail:
                 event_time=event_time,
                 request_time=self.pending_request_ms,
                 model=event.get("model"),
+                agent_id=self.agent_id,
             )
             self.pending_request_ms = None
         return True
@@ -228,6 +232,7 @@ class SessionMetrics:
         self.last_request_ms = 0.0
         self.last_usage_ms = 0.0
         self.latest_speed = None
+        self.request_history = []
 
     def _select_session(self, session_dir):
         if session_dir == self.session_dir:
@@ -236,25 +241,47 @@ class SessionMetrics:
         self.tails = {}
         self._clear_totals()
 
-    def add_usage(self, usage, event_time, request_time, model):
-        self.cache_read += number(usage.get("inputCacheRead"))
-        self.cache_creation += number(usage.get("inputCacheCreation"))
-        self.input_other += number(usage.get("inputOther"))
+    def add_usage(self, usage, event_time, request_time, model, agent_id):
+        cache_read = number(usage.get("inputCacheRead"))
+        cache_creation = number(usage.get("inputCacheCreation"))
+        input_other = number(usage.get("inputOther"))
         output = number(usage.get("output"))
+        self.cache_read += cache_read
+        self.cache_creation += cache_creation
+        self.input_other += input_other
         self.output += output
         self.request_count += 1
         self.last_usage_ms = max(self.last_usage_ms, event_time)
-        if (
-            request_time is not None
-            and event_time > request_time
-            and (
-                self.latest_speed is None
-                or event_time >= self.latest_speed["sample_time"]
-            )
-        ):
+
+        duration_ms = None
+        speed = None
+        if request_time is not None and event_time > request_time:
             duration_ms = event_time - request_time
+            speed = output * 1000.0 / duration_ms
+
+        self.request_history.append({
+            "time": int(event_time),
+            "agentId": agent_id if isinstance(agent_id, str) else None,
+            "model": model if isinstance(model, str) else None,
+            "uncachedInputTokens": int(input_other + cache_creation),
+            "cacheReadTokens": int(cache_read),
+            "cacheCreationTokens": int(cache_creation),
+            "inputOtherTokens": int(input_other),
+            "inputTokens": int(cache_read + cache_creation + input_other),
+            "outputTokens": int(output),
+            "speedTokensPerSecond": round(speed, 3) if speed is not None else None,
+            "durationMs": int(duration_ms) if duration_ms is not None else None,
+        })
+        if len(self.request_history) > REQUEST_HISTORY_RETENTION * 2:
+            self.request_history.sort(key=lambda item: item["time"])
+            self.request_history = self.request_history[-REQUEST_HISTORY_RETENTION:]
+
+        if speed is not None and (
+            self.latest_speed is None
+            or event_time >= self.latest_speed["sample_time"]
+        ):
             self.latest_speed = {
-                "value": output * 1000.0 / duration_ms,
+                "value": speed,
                 "sample_time": event_time,
                 "duration_ms": duration_ms,
                 "model": model if isinstance(model, str) else None,
@@ -308,6 +335,11 @@ class SessionMetrics:
             speed_sample_time = int(self.latest_speed["sample_time"])
             speed_duration_ms = int(self.latest_speed["duration_ms"])
             speed_model = self.latest_speed["model"]
+        recent_requests = sorted(
+            self.request_history,
+            key=lambda item: item["time"],
+            reverse=True,
+        )[:RECENT_REQUEST_LIMIT]
         return {
             "service": PLUGIN_ID,
             "sessionId": self.session_dir.name if self.session_dir else None,
@@ -327,6 +359,7 @@ class SessionMetrics:
             "lastRequestTime": int(self.last_request_ms) if self.last_request_ms else None,
             "lastUsageTime": int(self.last_usage_ms) if self.last_usage_ms else None,
             "serverTime": int(now_ms),
+            "recentRequests": recent_requests,
         }
 
 
