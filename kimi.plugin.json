@@ -1,7 +1,7 @@
 {
   "name": "kimi-code-token-meter",
-  "version": "1.2.0",
-  "description": "在 Kimi Code App 内置浏览器中显示当前会话的 token 输出速度与缓存命中率",
+  "version": "1.3.0",
+  "description": "在 Kimi Code App 内置浏览器或 macOS 原生悬浮窗中显示当前会话的 token 输出速度与缓存命中率",
   "interface": {
     "displayName": "Kimi Code Token Meter",
     "shortDescription": "App 内嵌实时 token 速度与缓存命中率看板",

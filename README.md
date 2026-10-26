@@ -1,13 +1,14 @@
 # Kimi Code Token Meter
 
-在 **Kimi Code App 的内置浏览器面板**中显示当前会话的 token 输出速度和缓存命中率。这是一个非官方社区插件。
+在 **Kimi Code App 内置浏览器或 macOS 原生悬浮窗**中显示当前会话的 token 输出速度和缓存命中率。这是一个非官方社区插件。
 
 ## 功能
 
 - 显示最近完成请求的平均输出速度，单位为 `token/s`。
 - 显示当前会话累计缓存命中率，包含主 Agent 和子 Agent。
 - 以表格展示最近 100 次请求的时间、Agent、模型、输入输出、缓存读取、速度和总耗时。
-- 每秒自动刷新；每个看板绑定发起命令的会话，并行窗口互不干扰。
+- macOS 原生悬浮窗支持置顶、拖动、紧凑/展开视图和自动跟随最近活跃会话。
+- 每秒自动刷新；每个内置浏览器看板绑定发起命令的会话，并行窗口互不干扰。
 - 只读取本地用量元数据，不上传对话、代码或凭据。
 - 仅监听 `127.0.0.1`；连续 15 分钟没有访问后自动停止。
 - Python 3.9+ 标准库实现，无第三方依赖。
@@ -33,6 +34,31 @@ https://github.com/yongpengli-z/kimi-code-token-meter
 如果客户端支持插件斜杠命令，也可以运行 `/kimi-code-token-meter:show`。部分 Kimi Code App 版本不显示该命令，此时使用上面的自然语言方式。
 
 当前在 macOS + Kimi Code Desktop 上开发和验证；需要 `python3`（或 `python`）可用。它不是 CLI 底部状态栏，也不会修改 `config.toml` 或 `tui.toml`。
+
+## 原生悬浮窗（macOS）
+
+在正式会话中直接对 Kimi 说：
+
+```text
+打开悬浮窗
+```
+
+首次或源码更新时，插件会用本机 Swift 工具链编译应用，构建位置为 `$KIMI_CODE_HOME/kimi-code-token-meter/TokenMeter.app`，使用 ad-hoc 签名。需要 macOS 11+ 和 Xcode Command Line Tools；缺少 `swiftc` 时可运行 `xcode-select --install` 安装。
+
+- 紧凑视图置顶显示速度和缓存命中率，可拖动，自动跟随最近活跃会话。
+- 点击顶部箭头展开或收起最近 100 条请求明细；也可以对 Kimi 说“打开悬浮窗并展开明细”。
+- 关闭悬浮窗只退出原生应用，不影响本地看板服务或内置浏览器。
+- 展开视图提供“登录时启动”开关，默认关闭。开启时写入 `~/Library/LaunchAgents/com.github.yongpengli-z.kimi-code-token-meter.plist`，关闭时删除。
+
+也可以在终端手动运行：
+
+```sh
+bash "${KIMI_CODE_HOME:-$HOME/.kimi-code}/plugins/managed/kimi-code-token-meter/scripts/open_floating.sh"
+# 直接展开明细
+bash "${KIMI_CODE_HOME:-$HOME/.kimi-code}/plugins/managed/kimi-code-token-meter/scripts/open_floating.sh" --details
+# 只编译，不打开窗口
+bash "${KIMI_CODE_HOME:-$HOME/.kimi-code}/plugins/managed/kimi-code-token-meter/scripts/open_floating.sh" --build-only
+```
 
 ## 指标定义
 
