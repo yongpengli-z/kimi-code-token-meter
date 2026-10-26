@@ -1,0 +1,25 @@
+{
+  "name": "kimi-code-token-meter",
+  "version": "1.0.0",
+  "description": "在 Kimi Code App 内置浏览器中显示当前会话的 token 输出速度与缓存命中率",
+  "interface": {
+    "displayName": "Kimi Code Token Meter",
+    "shortDescription": "App 内嵌实时 token 速度与缓存命中率看板",
+    "longDescription": "通过本地看板显示最近完成请求的平均输出 token/s，以及当前会话累计缓存命中率。所有数据只在本机处理。",
+    "developerName": "yongpengli-z",
+    "websiteURL": "https://github.com/yongpengli-z/kimi-code-token-meter"
+  },
+  "commands": "./commands/",
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "python3 ./scripts/token_meter.py --track-session || python ./scripts/token_meter.py --track-session",
+      "timeout": 5
+    },
+    {
+      "event": "TurnStarted",
+      "command": "python3 ./scripts/token_meter.py --track-session || python ./scripts/token_meter.py --track-session",
+      "timeout": 5
+    }
+  ]
+}
