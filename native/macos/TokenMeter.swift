@@ -23,6 +23,31 @@ struct RequestDetail: Decodable, Identifiable {
     }
 }
 
+struct SessionSummary: Decodable, Identifiable {
+    let sessionId: String
+    let title: String
+    let workDir: String?
+    let requestCount: Int
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheHitPercent: Double?
+    let speedTokensPerSecond: Double?
+    let lastUsageTime: Double?
+
+    var id: String { sessionId }
+}
+
+struct GlobalSnapshot: Decodable {
+    let sessionCount: Int
+    let requestCount: Int
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheHitPercent: Double?
+    let sessions: [SessionSummary]
+}
+
 struct MetricsSnapshot: Decodable {
     let sessionId: String?
     let speedTokensPerSecond: Double?
@@ -32,6 +57,7 @@ struct MetricsSnapshot: Decodable {
     let generating: Bool
     let lastUsageTime: Double?
     let recentRequests: [RequestDetail]?
+    let global: GlobalSnapshot?
 }
 
 struct AppConfiguration {
@@ -256,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = MetricsModel(configuration: .current())
         self.model = model
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 170),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 210),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -274,10 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
         panel.contentView = NSHostingView(rootView: FloatingWindowView(model: model))
-        panel.setFrameAutosaveName("TokenMeterFloatingWindow")
-        if UserDefaults.standard.object(forKey: "NSWindow Frame TokenMeterFloatingWindow") == nil,
-           let screen = NSScreen.main?.visibleFrame {
-            panel.setFrameOrigin(NSPoint(x: screen.maxX - 380, y: screen.maxY - 190))
+        if let screen = NSScreen.main?.visibleFrame {
+            panel.setFrameOrigin(NSPoint(x: screen.maxX - 420, y: screen.maxY - 230))
         }
         window = panel
         model.$isExpanded.sink { [weak self] _ in
@@ -299,7 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func resizeWindow(animated: Bool) {
         guard let window = window, let model = model else { return }
-        let size = model.isExpanded ? NSSize(width: 1000, height: 640) : NSSize(width: 360, height: 170)
+        let size = model.isExpanded ? NSSize(width: 1000, height: 640) : NSSize(width: 400, height: 210)
         var frame = window.frame
         let top = frame.origin.y + frame.height
         frame.origin.y = top - size.height
@@ -324,16 +348,28 @@ struct FloatingWindowView: View {
                 .fill(Color(red: 0.055, green: 0.067, blue: 0.095).opacity(0.98))
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 header
                 HStack(spacing: 18) {
                     MetricView(title: "输出速度", value: Format.speed(model.snapshot?.speedTokensPerSecond), color: .green)
                     MetricView(title: "缓存命中率", value: Format.percent(model.snapshot?.cacheHitPercent), color: .blue)
                 }
-                status
+                currentStatus
+                globalStatus
+                Text(model.statusText)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if model.isExpanded {
                     Divider().background(Color.white.opacity(0.12))
-                    RequestDetailsView(records: model.snapshot?.recentRequests ?? [])
+                    TabView {
+                        GlobalSessionsView(global: model.snapshot?.global)
+                            .tabItem { Text("会话汇总") }
+                        RequestDetailsView(records: model.snapshot?.recentRequests ?? [])
+                            .tabItem { Text("请求明细") }
+                    }
+                    .layoutPriority(1)
                     footer
                 }
             }
@@ -367,15 +403,21 @@ struct FloatingWindowView: View {
         .foregroundColor(.white)
     }
 
-    private var status: some View {
-        HStack(spacing: 8) {
-            Text(model.statusText)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer()
+    private var currentStatus: some View {
+        HStack {
             Text(Format.sessionName(model.snapshot?.sessionId))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            Spacer()
+            Text("\(Format.number(model.snapshot?.outputTokens ?? 0)) 输出")
+        }
+        .font(.system(size: 10))
+        .foregroundColor(.secondary)
+    }
+
+    private var globalStatus: some View {
+        HStack {
+            Text("全部 \(model.snapshot?.global?.sessionCount ?? 0) 个会话")
+            Spacer()
+            Text("\(Format.number(model.snapshot?.global?.outputTokens ?? 0)) 输出 · \(Format.percent(model.snapshot?.global?.cacheHitPercent))")
         }
         .font(.system(size: 10))
         .foregroundColor(.secondary)
@@ -391,6 +433,83 @@ struct FloatingWindowView: View {
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
+    }
+}
+
+struct GlobalSessionsView: View {
+    let global: GlobalSnapshot?
+    private var sessions: [SessionSummary] { global?.sessions ?? [] }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("全部 \(global?.sessionCount ?? 0) 个会话")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("\(Format.number(global?.requestCount ?? 0)) 次请求")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            HStack {
+                Text("\(Format.number(global?.outputTokens ?? 0)) 输出 token")
+                    .font(.system(size: 11))
+                Spacer()
+                Text("缓存 \(Format.percent(global?.cacheHitPercent))")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            HStack(spacing: 10) {
+                Text("会话").frame(maxWidth: .infinity, alignment: .leading)
+                Text("请求").frame(width: 55, alignment: .trailing)
+                Text("输出").frame(width: 90, alignment: .trailing)
+                Text("缓存").frame(width: 70, alignment: .trailing)
+                Text("速度").frame(width: 95, alignment: .trailing)
+                Text("最近用量").frame(width: 75, alignment: .trailing)
+            }
+            .font(.system(size: 9, weight: .medium))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 8)
+            if sessions.isEmpty {
+                Text("暂无会话用量")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(session.title)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Text("…" + String(session.sessionId.suffix(7)))
+                                        .font(.system(size: 8))
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(Format.number(session.requestCount))
+                                    .frame(width: 55, alignment: .trailing)
+                                Text(Format.number(session.outputTokens))
+                                    .frame(width: 90, alignment: .trailing)
+                                Text(Format.percent(session.cacheHitPercent))
+                                    .frame(width: 70, alignment: .trailing)
+                                Text(Format.speed(session.speedTokensPerSecond))
+                                    .frame(width: 95, alignment: .trailing)
+                                Text(session.lastUsageTime.map(Format.timestamp) ?? "--")
+                                    .frame(width: 75, alignment: .trailing)
+                            }
+                            .font(.system(size: 9, design: .monospaced))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 7)
+                            .background(index % 2 == 0 ? Color.clear : Color.white.opacity(0.025))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

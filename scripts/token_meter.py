@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 PLUGIN_ID = "kimi-code-token-meter"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
 DEFAULT_IDLE_TIMEOUT = 15 * 60
 RECENT_REQUEST_LIMIT = 100
@@ -216,9 +216,10 @@ class WireTail:
 
 
 class SessionMetrics:
-    def __init__(self, home, session_id=None):
+    def __init__(self, home, session_id=None, retain_history=True):
         self.home = home
         self.session_id = session_id
+        self.retain_history = retain_history
         self.session_dir = None
         self.tails = {}
         self._clear_totals()
@@ -259,22 +260,23 @@ class SessionMetrics:
             duration_ms = event_time - request_time
             speed = output * 1000.0 / duration_ms
 
-        self.request_history.append({
-            "time": int(event_time),
-            "agentId": agent_id if isinstance(agent_id, str) else None,
-            "model": model if isinstance(model, str) else None,
-            "uncachedInputTokens": int(input_other + cache_creation),
-            "cacheReadTokens": int(cache_read),
-            "cacheCreationTokens": int(cache_creation),
-            "inputOtherTokens": int(input_other),
-            "inputTokens": int(cache_read + cache_creation + input_other),
-            "outputTokens": int(output),
-            "speedTokensPerSecond": round(speed, 3) if speed is not None else None,
-            "durationMs": int(duration_ms) if duration_ms is not None else None,
-        })
-        if len(self.request_history) > REQUEST_HISTORY_RETENTION * 2:
-            self.request_history.sort(key=lambda item: item["time"])
-            self.request_history = self.request_history[-REQUEST_HISTORY_RETENTION:]
+        if self.retain_history:
+            self.request_history.append({
+                "time": int(event_time),
+                "agentId": agent_id if isinstance(agent_id, str) else None,
+                "model": model if isinstance(model, str) else None,
+                "uncachedInputTokens": int(input_other + cache_creation),
+                "cacheReadTokens": int(cache_read),
+                "cacheCreationTokens": int(cache_creation),
+                "inputOtherTokens": int(input_other),
+                "inputTokens": int(cache_read + cache_creation + input_other),
+                "outputTokens": int(output),
+                "speedTokensPerSecond": round(speed, 3) if speed is not None else None,
+                "durationMs": int(duration_ms) if duration_ms is not None else None,
+            })
+            if len(self.request_history) > REQUEST_HISTORY_RETENTION * 2:
+                self.request_history.sort(key=lambda item: item["time"])
+                self.request_history = self.request_history[-REQUEST_HISTORY_RETENTION:]
 
         if speed is not None and (
             self.latest_speed is None
@@ -363,6 +365,96 @@ class SessionMetrics:
         }
 
 
+def session_directories(home):
+    try:
+        return {
+            candidate
+            for candidate in (home / "sessions").glob("*/*")
+            if candidate.is_dir() and wire_files(candidate)
+        }
+    except OSError:
+        return set()
+
+
+def session_metadata(session_dir):
+    state = read_json(session_dir / "state.json")
+    if not isinstance(state, dict):
+        return session_dir.name, None
+    title = state.get("title")
+    work_dir = state.get("cwd")
+    return (
+        title if isinstance(title, str) and title else session_dir.name,
+        work_dir if isinstance(work_dir, str) else None,
+    )
+
+
+def session_is_archived(session_dir):
+    state = read_json(session_dir / "state.json")
+    return isinstance(state, dict) and state.get("archived") is True
+
+
+class GlobalMetrics:
+    def __init__(self, home, cache_seconds=3.0):
+        self.home = home
+        self.cache_seconds = cache_seconds
+        self.engines = {}
+        self.cached_at = 0.0
+        self.cached_snapshot = None
+
+    def poll(self):
+        now = time.monotonic()
+        if self.cached_snapshot is not None and now - self.cached_at < self.cache_seconds:
+            return self.cached_snapshot
+        directories = {
+            directory
+            for directory in session_directories(self.home)
+            if not session_is_archived(directory)
+        }
+        for removed in set(self.engines) - directories:
+            del self.engines[removed]
+        for directory in sorted(directories):
+            if directory not in self.engines:
+                self.engines[directory] = SessionMetrics(
+                    self.home,
+                    directory.name,
+                    retain_history=False,
+                )
+        records = []
+        for directory, engine in self.engines.items():
+            snapshot = engine.poll()
+            if snapshot["requestCount"] == 0:
+                continue
+            title, work_dir = session_metadata(directory)
+            records.append({
+                "sessionId": directory.name,
+                "title": title,
+                "workDir": work_dir,
+                "requestCount": snapshot["requestCount"],
+                "inputTokens": snapshot["inputTokens"],
+                "outputTokens": snapshot["outputTokens"],
+                "cacheReadTokens": snapshot["cacheReadTokens"],
+                "cacheHitPercent": snapshot["cacheHitPercent"],
+                "speedTokensPerSecond": snapshot["speedTokensPerSecond"],
+                "lastUsageTime": snapshot["lastUsageTime"],
+            })
+        records.sort(key=lambda item: item["lastUsageTime"] or 0, reverse=True)
+        request_count = sum(item["requestCount"] for item in records)
+        input_tokens = sum(item["inputTokens"] for item in records)
+        output_tokens = sum(item["outputTokens"] for item in records)
+        cache_read = sum(item["cacheReadTokens"] for item in records)
+        self.cached_snapshot = {
+            "sessionCount": len(records),
+            "requestCount": request_count,
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "cacheReadTokens": cache_read,
+            "cacheHitPercent": round(cache_read * 100.0 / input_tokens, 3) if input_tokens else None,
+            "sessions": records,
+        }
+        self.cached_at = now
+        return self.cached_snapshot
+
+
 class DashboardHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -370,6 +462,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         super().__init__(address, handler)
         self.home = home
         self.engines = {}
+        self.global_metrics = GlobalMetrics(home)
         self.metrics_lock = threading.Lock()
         self.page = page
         self.idle_timeout = idle_timeout
@@ -380,7 +473,9 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         with self.metrics_lock:
             if key not in self.engines:
                 self.engines[key] = SessionMetrics(self.home, session_id)
-            return self.engines[key].poll()
+            snapshot = self.engines[key].poll()
+            snapshot["global"] = self.global_metrics.poll()
+            return snapshot
 
 
 class DashboardHandler(BaseHTTPRequestHandler):

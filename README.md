@@ -8,6 +8,7 @@
 - 显示当前会话累计缓存命中率，包含主 Agent 和子 Agent。
 - 以表格展示最近 100 次请求的时间、Agent、模型、输入输出、缓存读取、速度和总耗时。
 - macOS 原生悬浮窗支持置顶、拖动、紧凑/展开视图和自动跟随最近活跃会话。
+- 汇总当前与全部非归档本地会话的消耗，并按会话列出请求数、输出、缓存命中率和最近速度。
 - 每秒自动刷新；每个内置浏览器看板绑定发起命令的会话，并行窗口互不干扰。
 - 只读取本地用量元数据，不上传对话、代码或凭据。
 - 仅监听 `127.0.0.1`；连续 15 分钟没有访问后自动停止。
@@ -45,8 +46,8 @@ https://github.com/yongpengli-z/kimi-code-token-meter
 
 首次或源码更新时，插件会用本机 Swift 工具链编译应用，构建位置为 `$KIMI_CODE_HOME/kimi-code-token-meter/TokenMeter.app`，使用 ad-hoc 签名。需要 macOS 11+ 和 Xcode Command Line Tools；缺少 `swiftc` 时可运行 `xcode-select --install` 安装。
 
-- 紧凑视图置顶显示速度和缓存命中率，可拖动，自动跟随最近活跃会话。
-- 点击顶部箭头展开或收起最近 100 条请求明细；也可以对 Kimi 说“打开悬浮窗并展开明细”。
+- 紧凑视图同时显示当前会话与全部非归档会话的输出消耗、速度和缓存命中率，可拖动。
+- 展开视图提供“会话汇总”和“请求明细”两个页签：前者列出全部非归档会话及各自消耗，后者保留当前会话最近 100 条请求。
 - 关闭悬浮窗只退出原生应用，不影响本地看板服务或内置浏览器。
 - 展开视图提供“登录时启动”开关，默认关闭。开启时写入 `~/Library/LaunchAgents/com.github.yongpengli-z.kimi-code-token-meter.plist`，关闭时删除。
 
@@ -59,6 +60,12 @@ bash "${KIMI_CODE_HOME:-$HOME/.kimi-code}/plugins/managed/kimi-code-token-meter/
 # 只编译，不打开窗口
 bash "${KIMI_CODE_HOME:-$HOME/.kimi-code}/plugins/managed/kimi-code-token-meter/scripts/open_floating.sh" --build-only
 ```
+
+## 全部会话汇总
+
+“全部会话”统计 `$KIMI_CODE_HOME/sessions` 中所有**非归档**且有 turn 级用量记录的本地会话，包含未归档的历史会话。`state.json` 中 `archived: true` 的会话不参与总计，也不出现在会话明细中。
+
+总计包含会话数、请求数、输入/输出 token 和整体缓存命中率；每个会话的明细包含标题、请求数、输出 token、缓存命中率、最近速度和最近用量时间，按最近用量倒序排列。全局数据增量读取并缓存约 3 秒，不为所有会话保留请求明细。
 
 ## 指标定义
 
@@ -93,9 +100,10 @@ inputCacheRead / (inputCacheRead + inputCacheCreation + inputOther) × 100%
 
 插件从 `$KIMI_CODE_HOME`（默认 `~/.kimi-code`）读取以下信息：
 
-- 最近活跃会话 `agents/*/wire.jsonl` 中的 `llm.request` 和 turn 级 `usage.record`，用于计算指标并在打开看板时绑定会话。
+- 最近活跃会话及全部非归档会话 `agents/*/wire.jsonl` 中的 `llm.request` 和 turn 级 `usage.record`，用于计算指标并在打开看板时绑定会话。
+- `state.json` 中的会话标题、工作目录和归档标记，用于会话明细展示及排除归档会话。
 
-页面和 API 只返回请求级用量元数据、聚合指标及 session id，不返回提示词、回复、工具输出或代码。运行状态保存在 `$KIMI_CODE_HOME/kimi-code-token-meter/`，看板服务不对局域网或公网开放。
+页面和 API 只返回请求级用量元数据、会话与全局聚合指标、session id、标题和工作目录，不返回提示词、回复、工具输出或代码。运行状态保存在 `$KIMI_CODE_HOME/kimi-code-token-meter/`，看板服务不对局域网或公网开放。
 
 ## 调试
 
