@@ -30,7 +30,7 @@ https://github.com/yongpengli-z/kimi-code-token-meter
 打开看板
 ```
 
-插件的 sessionStart Skill 会在每个正式会话中提供打开指令，并在 App 的内置浏览器面板中显示看板，不依赖斜杠命令补全列表。
+插件的 sessionStart Skill 会在每个正式会话中提供打开指令，默认同时打开 App 内置浏览器看板和 macOS 原生悬浮窗。关闭浏览器后，悬浮窗仍会继续独立显示和刷新；不依赖斜杠命令补全列表。
 
 如果客户端支持插件斜杠命令，也可以运行 `/kimi-code-token-meter:show`。部分 Kimi Code App 版本不显示该命令，此时使用上面的自然语言方式。
 
