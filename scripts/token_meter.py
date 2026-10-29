@@ -543,7 +543,11 @@ def healthy_url(home):
     try:
         with urllib.request.urlopen(url + "api/health", timeout=0.4) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        if payload.get("ok") is True and payload.get("service") == PLUGIN_ID:
+        if (
+            payload.get("ok") is True
+            and payload.get("service") == PLUGIN_ID
+            and payload.get("version") == VERSION
+        ):
             return url
     except (OSError, ValueError, AttributeError):
         pass
