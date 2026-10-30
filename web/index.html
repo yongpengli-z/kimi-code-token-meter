@@ -120,6 +120,19 @@
     .total-value { display: block; margin-bottom: 6px; text-align: right; font-family: "SF Mono", "Roboto Mono", ui-monospace, monospace; }
     .bar-track { width: 110px; height: 4px; margin-left: auto; overflow: hidden; border-radius: 3px; background: var(--border); }
     .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #547ef3, #bd5bd9); }
+    .cost, .cost-cell { color: var(--orange); }
+    dialog { width: min(760px, calc(100% - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 24px 80px #0004; }
+    dialog::backdrop { background: rgba(15, 20, 30, .48); backdrop-filter: blur(3px); }
+    .pricing-content { padding: 22px 24px; }
+    .pricing-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .pricing-head h2 { margin: 0 0 5px; font-size: 17px; }
+    .pricing-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .pricing-table { width: 100%; min-width: 0; }
+    .pricing-table th, .pricing-table td { height: 52px; padding: 8px 10px; }
+    .pricing-table td:first-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .pricing-table input { width: 110px; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-soft); color: var(--text); text-align: right; }
+    .pricing-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .primary-button { height: 36px; padding: 0 16px; border-radius: 10px; background: var(--blue); color: white; }
     .empty { padding: 46px 20px; color: var(--muted); text-align: center; }
     footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 16px; color: var(--muted); font-size: 10px; line-height: 1.7; }
     .spin { display: inline-block; animation: spin .8s linear infinite; }
@@ -157,7 +170,7 @@
       <article class="card"><div class="label">输出</div><div class="value" id="output-tokens">--</div><div class="note">tokens · 输入 <span id="input-tokens">--</span></div></article>
       <article class="card"><div class="label">平均生成速度</div><div class="value"><span id="average-speed">--</span><span class="speed-bars"><i></i><i></i><i></i><i></i><i></i></span></div><div class="note">tokens/s · 按请求总耗时加权</div></article>
       <article class="card"><div class="label">缓存命中率</div><div class="value"><span id="cache-hit">--</span><span id="cache-ring" class="ring"></span></div><div class="note">缓存读取 ÷（缓存读取 + 普通输入）</div></article>
-      <article class="card"><div class="label">缓存读取</div><div class="value" id="cache-read">--</div><div class="note">tokens · 未命中输入 <span id="uncached-input">--</span></div></article>
+      <article class="card"><div class="label">估算花费</div><div class="value cost" id="estimated-cost">¥0.00</div><div class="note">按本地价目表估算 · <span id="priced-models">0</span> 个模型已定价<br>未定价模型不计入</div></article>
       <article class="card"><div class="label">统计范围</div><div class="value small"><span id="session-count">0</span>&nbsp;会话 ·&nbsp;<span id="model-count">0</span>&nbsp;模型</div><div class="note">非归档本地会话 · 包含主 Agent 与子 Agent</div></article>
     </section>
 
@@ -193,10 +206,19 @@
         </div>
         <label class="show-all"><input id="show-all" type="checkbox">显示全部</label>
         <span class="filter-spacer"></span>
+        <button id="pricing" class="tool-button">价目表</button>
         <button id="theme" class="tool-button">暗色</button>
         <button id="refresh" class="tool-button">↻ 重新扫描</button>
       </div>
     </section>
+
+    <dialog id="pricing-dialog">
+      <div class="pricing-content">
+        <div class="pricing-head"><div><h2>模型价目表</h2><p>人民币 / 百万 tokens，仅用于本地估算。缓存创建与普通输入统一按“未缓存输入”计价。</p></div><button id="close-pricing" class="tool-button" aria-label="关闭">×</button></div>
+        <table class="pricing-table"><thead><tr><th>模型</th><th>未缓存输入</th><th>缓存读取</th><th>输出</th></tr></thead><tbody id="pricing-rows"></tbody></table>
+        <div class="pricing-actions"><button id="cancel-pricing" class="tool-button">取消</button><button id="save-pricing" class="primary-button">保存并重新计算</button></div>
+      </div>
+    </dialog>
 
     <section class="table-panel" aria-label="消耗明细">
       <div class="table-scroll" id="table-scroll">
@@ -236,6 +258,57 @@
       const parts = value.split("/");
       return parts[parts.length - 1];
     }
+    function getPricing() {
+      try { return JSON.parse(localStorage.getItem("token-meter-pricing") || "{}"); }
+      catch (error) { return {}; }
+    }
+    function money(value) {
+      return `¥${Number(value || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    function modelCost(item, prices = getPricing()) {
+      const rate = prices[item.name] || {};
+      return (item.uncachedInputTokens * (rate.uncached || 0) + item.cacheReadTokens * (rate.cacheRead || 0) + item.outputTokens * (rate.output || 0)) / 1000000;
+    }
+    function isPriced(rate) {
+      return Boolean(rate && (rate.uncached > 0 || rate.cacheRead > 0 || rate.output > 0));
+    }
+    function openPricing() {
+      if (!state.data) return;
+      const prices = getPricing();
+      const fragment = document.createDocumentFragment();
+      for (const item of state.data.models) {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        name.textContent = modelName(item.name);
+        name.title = item.name;
+        row.appendChild(name);
+        for (const kind of ["uncached", "cacheRead", "output"]) {
+          const cell = document.createElement("td");
+          const input = document.createElement("input");
+          input.type = "number"; input.min = "0"; input.step = "0.01"; input.placeholder = "0.00";
+          input.dataset.model = item.name; input.dataset.kind = kind;
+          input.value = prices[item.name]?.[kind] || "";
+          input.setAttribute("aria-label", `${modelName(item.name)} ${kind} 单价`);
+          cell.appendChild(input); row.appendChild(cell);
+        }
+        fragment.appendChild(row);
+      }
+      byId("pricing-rows").replaceChildren(fragment);
+      byId("pricing-dialog").showModal();
+    }
+    function savePricing() {
+      const prices = {};
+      document.querySelectorAll("#pricing-rows input").forEach(input => {
+        const model = input.dataset.model;
+        const kind = input.dataset.kind;
+        const value = Number(input.value);
+        prices[model] ||= { uncached: 0, cacheRead: 0, output: 0 };
+        prices[model][kind] = Number.isFinite(value) && value > 0 ? value : 0;
+      });
+      localStorage.setItem("token-meter-pricing", JSON.stringify(prices));
+      byId("pricing-dialog").close();
+      if (state.data) render(state.data);
+    }
 
     function setRange(range) {
       state.range = range;
@@ -262,8 +335,10 @@
       byId("average-speed").textContent = speed(summary.speedTokensPerSecond);
       byId("cache-hit").textContent = percent(summary.cacheHitPercent);
       byId("cache-ring").style.setProperty("--percent", summary.cacheHitPercent || 0);
-      byId("cache-read").textContent = compact(summary.cacheReadTokens);
-      byId("uncached-input").textContent = compact(summary.uncachedInputTokens);
+      const prices = getPricing();
+      const models = state.data ? state.data.models : [];
+      byId("estimated-cost").textContent = money(models.reduce((total, item) => total + modelCost(item, prices), 0));
+      byId("priced-models").textContent = models.filter(item => isPriced(prices[item.name])).length;
       byId("session-count").textContent = summary.sessionCount;
       byId("model-count").textContent = summary.modelCount;
     }
@@ -300,7 +375,7 @@
       ["speedTokensPerSecond", "平均 t/s", speed],
     ];
     function columns() {
-      if (state.tab === "models") return [["name", "模型", "name"], ...commonColumns, ["latestSpeedTokensPerSecond", "最近 t/s", speed], ["lastUsageTime", "最近使用", dateTime]];
+      if (state.tab === "models") return [["name", "模型", "name"], ...commonColumns.slice(0, 5), ["estimatedCost", "估算花费", "cost"], ...commonColumns.slice(5), ["latestSpeedTokensPerSecond", "最近 t/s", speed], ["lastUsageTime", "最近使用", dateTime]];
       if (state.tab === "sessions") return [["name", "会话", "session"], ["project", "项目", "text"], ...commonColumns, ["lastUsageTime", "最近使用", dateTime]];
       return [["name", "项目", "name"], ["sessionCount", "会话数", value => integer.format(value)], ...commonColumns, ["lastUsageTime", "最近使用", dateTime]];
     }
@@ -329,6 +404,9 @@
             const track = document.createElement("div"); track.className = "bar-track";
             const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${maximum ? item[key] * 100 / maximum : 0}%`;
             track.appendChild(fill); cell.append(value, track);
+          } else if (format === "cost") {
+            cell.className = "cost-cell";
+            cell.textContent = money(modelCost(item));
           } else if (format === "name" || format === "session") {
             cell.className = `name-cell${format === "session" ? " session" : ""}`;
             cell.title = state.tab === "models" ? item.name : (item.workDir || item.name);
@@ -397,6 +475,10 @@
     });
     byId("show-all").addEventListener("change", renderTable);
     byId("refresh").addEventListener("click", refresh);
+    byId("pricing").addEventListener("click", openPricing);
+    byId("save-pricing").addEventListener("click", savePricing);
+    byId("close-pricing").addEventListener("click", () => byId("pricing-dialog").close());
+    byId("cancel-pricing").addEventListener("click", () => byId("pricing-dialog").close());
     byId("theme").addEventListener("click", () => {
       const dark = document.documentElement.dataset.theme !== "dark";
       document.documentElement.dataset.theme = dark ? "dark" : "light";

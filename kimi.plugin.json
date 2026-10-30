@@ -1,11 +1,11 @@
 {
   "name": "kimi-code-token-meter",
-  "version": "2.0.0",
-  "description": "在 Kimi Code App 内置浏览器中展示 token 用量、速度、缓存命中率和每日消耗热力图",
+  "version": "2.1.0",
+  "description": "在 Kimi Code App 内置浏览器中展示 token 用量、速度、缓存命中率、估算花费和每日消耗热力图",
   "interface": {
     "displayName": "Kimi Code Token Meter",
     "shortDescription": "浏览器版 Kimi Code 本地用量分析看板",
-    "longDescription": "通过本地浏览器看板展示 token 用量、加权生成速度、缓存命中率、每日热力图，以及模型、会话和项目汇总。所有数据只在本机处理。",
+    "longDescription": "通过本地浏览器看板展示 token 用量、加权生成速度、缓存命中率、可配置价目的估算花费、每日热力图，以及模型、会话和项目汇总。所有数据只在本机处理。",
     "developerName": "yongpengli-z",
     "websiteURL": "https://github.com/yongpengli-z/kimi-code-token-meter"
   },
