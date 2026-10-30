@@ -6,204 +6,410 @@
   <title>Kimi Code Token Meter</title>
   <style>
     :root {
+      color-scheme: light;
+      --bg: #f3f5f9;
+      --panel: #ffffff;
+      --panel-soft: #f8f9fc;
+      --border: #e6e9f0;
+      --text: #252a34;
+      --muted: #8a909d;
+      --blue: #2f6fed;
+      --blue-soft: #eaf1ff;
+      --cyan: #18a9c7;
+      --orange: #d58a28;
+      --shadow: 0 5px 20px rgba(35, 45, 70, .055);
+    }
+    :root[data-theme="dark"] {
       color-scheme: dark;
-      --bg: #0d1017;
-      --panel: #151a24;
-      --border: #283041;
-      --text: #f2f5fa;
-      --muted: #98a2b5;
-      --green: #71e2ae;
-      --blue: #8fb8ff;
+      --bg: #11141b;
+      --panel: #191d26;
+      --panel-soft: #202530;
+      --border: #2c3240;
+      --text: #edf0f6;
+      --muted: #949dad;
+      --blue: #6e9cff;
+      --blue-soft: #243554;
+      --cyan: #42c3db;
+      --orange: #e5a34d;
+      --shadow: 0 8px 24px rgba(0, 0, 0, .18);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      min-height: 100vh;
-      background: radial-gradient(circle at top right, #17223a 0, var(--bg) 42%);
+      min-width: 320px;
+      background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      font-size: 14px;
     }
-    main { width: min(1100px, 100%); margin: 0 auto; padding: 42px 24px 28px; }
-    header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
-    h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
-    header span { color: var(--muted); font-size: 13px; }
-    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .card {
-      min-height: 190px;
-      padding: 24px;
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    main { width: min(1880px, 100%); margin: 0 auto; padding: 22px 24px 30px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--blue); color: white; font-weight: 750; box-shadow: 0 5px 14px rgba(47,111,237,.24); }
+    h1 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .subtitle { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .connection { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #36b77e; }
+    .dot.error { background: #e35d6a; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .card, .panel, .filters {
       border: 1px solid var(--border);
-      border-radius: 18px;
-      background: color-mix(in srgb, var(--panel) 92%, transparent);
-      box-shadow: 0 18px 45px #0004;
+      background: var(--panel);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
     }
-    .label { color: var(--muted); font-size: 14px; }
-    .value { margin: 20px 0 14px; font-size: clamp(36px, 7vw, 58px); font-weight: 680; letter-spacing: -0.045em; }
-    .speed { color: var(--green); }
-    .cache { color: var(--blue); }
-    .unit { margin-left: 7px; color: var(--muted); font-size: 15px; font-weight: 500; letter-spacing: 0; }
-    .note { color: var(--muted); font-size: 12px; line-height: 1.6; }
-    .status-panel { margin-top: 20px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 13px; background: #111620; }
-    .status { display: flex; align-items: center; gap: 9px; font-size: 13px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px #71e2ae88; }
-    .dot.busy { background: #f7c873; box-shadow: 0 0 12px #f7c87366; }
-    .dot.error { background: #ff8f8f; box-shadow: none; }
-    .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 11px; color: var(--muted); font-size: 12px; }
-    .details-panel { margin-top: 20px; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: #111620; }
-    .details-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--border); }
-    .details-heading h2 { margin: 0; font-size: 15px; }
-    .details-heading span { color: var(--muted); font-size: 11px; }
-    .table-scroll { max-height: 520px; overflow: auto; }
-    table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-    th, td { padding: 11px 12px; border-bottom: 1px solid #232b3a; text-align: right; white-space: nowrap; }
-    th { position: sticky; top: 0; z-index: 1; background: #171d29; color: var(--muted); font-weight: 500; }
-    th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+    .card { min-height: 142px; padding: 22px 24px 18px; }
+    .label { color: var(--muted); font-size: 13px; }
+    .value { display: flex; align-items: center; gap: 12px; min-height: 45px; margin-top: 9px; font-family: "SF Mono", "Roboto Mono", ui-monospace, monospace; font-size: clamp(27px, 2.3vw, 35px); font-weight: 750; letter-spacing: -.055em; }
+    .value.small { font-size: clamp(22px, 1.8vw, 28px); letter-spacing: -.04em; }
+    .note { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .speed-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 26px; }
+    .speed-bars i { display: block; width: 5px; border-radius: 2px; background: var(--blue); }
+    .speed-bars i:nth-child(1) { height: 12px; }
+    .speed-bars i:nth-child(2) { height: 18px; }
+    .speed-bars i:nth-child(3) { height: 25px; }
+    .speed-bars i:nth-child(4) { height: 20px; }
+    .speed-bars i:nth-child(5) { height: 26px; }
+    .ring { --percent: 0; width: 29px; height: 29px; border-radius: 50%; background: conic-gradient(var(--blue) calc(var(--percent) * 1%), var(--blue-soft) 0); position: relative; flex: 0 0 auto; }
+    .ring::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--panel); }
+    .panel { margin-top: 20px; padding: 20px 24px; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .panel-title { font-size: 15px; font-weight: 700; }
+    .panel-note { margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .heat-summary { color: var(--muted); font-size: 11px; text-align: right; }
+    .heatmap-wrap { margin-top: 18px; overflow-x: auto; padding-bottom: 3px; }
+    .heatmap { display: grid; grid-template-columns: repeat(25, minmax(12px, 1fr)); gap: 5px; min-width: 650px; }
+    .heat-cell { height: 16px; border-radius: 3px; background: var(--blue-soft); }
+    .heat-cell[data-level="1"] { background: color-mix(in srgb, var(--blue) 22%, var(--panel)); }
+    .heat-cell[data-level="2"] { background: color-mix(in srgb, var(--blue) 43%, var(--panel)); }
+    .heat-cell[data-level="3"] { background: color-mix(in srgb, var(--blue) 67%, var(--panel)); }
+    .heat-cell[data-level="4"] { background: var(--blue); }
+    .heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 5px; margin-top: 10px; color: var(--muted); font-size: 10px; }
+    .heat-legend i { width: 11px; height: 11px; border-radius: 2px; }
+    .filters { margin-top: 20px; padding: 12px 16px; }
+    .filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .filter-row + .filter-row { margin-top: 11px; }
+    .segmented { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-soft); }
+    button { border: 0; color: var(--text); background: transparent; }
+    .range-button, .tab-button { padding: 8px 17px; border-radius: 9px; color: var(--muted); font-size: 12px; }
+    button.active { color: #fff; background: var(--blue); box-shadow: 0 4px 12px rgba(47,111,237,.22); }
+    button:hover:not(.active) { background: var(--blue-soft); }
+    .date-controls { display: inline-flex; align-items: center; gap: 8px; }
+    input[type="date"] { height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: 12px; }
+    .apply-button, .tool-button { height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 12px; }
+    .range-badge { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 13px; border: 1px solid color-mix(in srgb, var(--blue) 55%, var(--border)); border-radius: 18px; color: var(--blue); background: var(--blue-soft); font-size: 11px; }
+    .show-all { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; color: var(--muted); font-size: 12px; }
+    .filter-spacer { flex: 1; }
+    .table-panel { margin-top: 20px; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
+    .table-scroll { overflow: auto; max-height: 620px; }
+    table { width: 100%; min-width: 1250px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { height: 58px; padding: 10px 16px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: 12px; }
+    th { height: 44px; background: var(--panel-soft); color: var(--muted); font-size: 11px; font-weight: 500; }
+    th:first-child, td:first-child { text-align: left; }
+    th:nth-child(2), td:nth-child(2) { text-align: left; }
     tbody tr:last-child td { border-bottom: 0; }
-    tbody tr:hover { background: #ffffff05; }
-    td.model { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-    .empty { padding: 28px 18px; color: var(--muted); text-align: center; font-size: 13px; }
-    footer { margin-top: 18px; color: #727d91; font-size: 11px; line-height: 1.7; }
-    @media (max-width: 620px) {
-      main { padding: 28px 16px 20px; }
-      header { align-items: flex-start; flex-direction: column; gap: 6px; }
+    tbody tr:hover { background: var(--panel-soft); }
+    .name-cell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font-family: "SF Mono", "Roboto Mono", ui-monospace, monospace; font-size: 13px; }
+    .name-cell.session { font-family: inherit; }
+    .primary { display: block; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+    .secondary { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .hit { color: var(--cyan); font-weight: 650; }
+    .total-cell { min-width: 155px; }
+    .total-value { display: block; margin-bottom: 6px; text-align: right; font-family: "SF Mono", "Roboto Mono", ui-monospace, monospace; }
+    .bar-track { width: 110px; height: 4px; margin-left: auto; overflow: hidden; border-radius: 3px; background: var(--border); }
+    .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #547ef3, #bd5bd9); }
+    .empty { padding: 46px 20px; color: var(--muted); text-align: center; }
+    footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 16px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+    .spin { display: inline-block; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 900px) {
+      main { padding: 16px; }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .panel-heading { align-items: flex-start; flex-direction: column; }
+      .heat-summary { text-align: left; }
+      .filter-spacer { display: none; }
+      footer { flex-direction: column; gap: 4px; }
+    }
+    @media (max-width: 560px) {
       .cards { grid-template-columns: 1fr; }
-      .card { min-height: 155px; }
-      .value { margin: 14px 0 10px; }
+      .card { min-height: 125px; }
+      .topbar { align-items: flex-start; }
+      .connection { max-width: 130px; text-align: right; }
+      .range-button, .tab-button { padding: 7px 11px; }
+      .date-controls { flex-wrap: wrap; }
     }
   </style>
 </head>
 <body>
   <main>
-    <header>
-      <h1>Token Meter</h1>
-      <span>Kimi Code · 当前会话</span>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div><h1>Token Meter</h1><div class="subtitle">Kimi Code 本地用量分析</div></div>
+      </div>
+      <div class="connection"><span id="dot" class="dot"></span><span id="status">正在读取本地用量…</span></div>
     </header>
-    <section class="cards" aria-label="当前会话指标">
-      <article class="card">
-        <div class="label">输出速度</div>
-        <div class="value speed"><span id="speed">--</span><span class="unit">token/s</span></div>
-        <div class="note">最近完成请求的平均输出速度<br>包含请求首包与生成耗时</div>
-      </article>
-      <article class="card">
-        <div class="label">缓存命中率</div>
-        <div class="value cache"><span id="cache">--</span><span class="unit">%</span></div>
-        <div class="note">当前会话累计输入<br>包含主 Agent 与子 Agent</div>
-      </article>
+
+    <section class="cards" aria-label="用量汇总">
+      <article class="card"><div class="label">总消耗</div><div class="value" id="total-tokens">--</div><div class="note">tokens · <span id="total-requests">0</span> 次请求</div></article>
+      <article class="card"><div class="label">输出</div><div class="value" id="output-tokens">--</div><div class="note">tokens · 输入 <span id="input-tokens">--</span></div></article>
+      <article class="card"><div class="label">平均生成速度</div><div class="value"><span id="average-speed">--</span><span class="speed-bars"><i></i><i></i><i></i><i></i><i></i></span></div><div class="note">tokens/s · 按请求总耗时加权</div></article>
+      <article class="card"><div class="label">缓存命中率</div><div class="value"><span id="cache-hit">--</span><span id="cache-ring" class="ring"></span></div><div class="note">缓存读取 ÷（缓存读取 + 普通输入）</div></article>
+      <article class="card"><div class="label">缓存读取</div><div class="value" id="cache-read">--</div><div class="note">tokens · 未命中输入 <span id="uncached-input">--</span></div></article>
+      <article class="card"><div class="label">统计范围</div><div class="value small"><span id="session-count">0</span>&nbsp;会话 ·&nbsp;<span id="model-count">0</span>&nbsp;模型</div><div class="note">非归档本地会话 · 包含主 Agent 与子 Agent</div></article>
     </section>
-    <section class="status-panel">
-      <div class="status" aria-live="polite"><span id="dot" class="dot"></span><span id="status">正在读取本地用量记录…</span></div>
-      <div class="meta">
-        <span id="session">未发现会话</span>
-        <span id="requests">0 次请求</span>
-        <span id="tokens">0 输出 token</span>
+
+    <section class="panel" aria-label="每日消耗热力图">
+      <div class="panel-heading">
+        <div><div class="panel-title">每日消耗热力图</div><div class="panel-note">近 100 天 · 悬停查看当日明细</div></div>
+        <div class="heat-summary" id="heat-summary">暂无消耗记录</div>
+      </div>
+      <div class="heatmap-wrap"><div id="heatmap" class="heatmap"></div></div>
+      <div class="heat-legend">少 <i class="heat-cell" data-level="0"></i><i class="heat-cell" data-level="1"></i><i class="heat-cell" data-level="2"></i><i class="heat-cell" data-level="3"></i><i class="heat-cell" data-level="4"></i> 多</div>
+    </section>
+
+    <section class="filters" aria-label="看板筛选">
+      <div class="filter-row">
+        <div class="segmented" id="ranges">
+          <button class="range-button" data-range="today">今日</button>
+          <button class="range-button" data-range="yesterday">昨天</button>
+          <button class="range-button" data-range="7d">近 7 天</button>
+          <button class="range-button active" data-range="all">全部</button>
+          <button class="range-button" data-range="custom">自定义</button>
+        </div>
+        <div class="date-controls">
+          <input id="start-date" type="date" aria-label="开始日期"><span>~</span><input id="end-date" type="date" aria-label="结束日期">
+          <button id="apply-range" class="apply-button">应用</button>
+        </div>
+        <span id="range-badge" class="range-badge">全部时间</span>
+      </div>
+      <div class="filter-row">
+        <div class="segmented" id="tabs">
+          <button class="tab-button active" data-tab="models">模型</button>
+          <button class="tab-button" data-tab="sessions">会话</button>
+          <button class="tab-button" data-tab="projects">项目</button>
+        </div>
+        <label class="show-all"><input id="show-all" type="checkbox">显示全部</label>
+        <span class="filter-spacer"></span>
+        <button id="theme" class="tool-button">暗色</button>
+        <button id="refresh" class="tool-button">↻ 重新扫描</button>
       </div>
     </section>
-    <section class="details-panel" aria-label="请求明细">
-      <div class="details-heading"><h2>请求明细</h2><span>最近 100 条 · 按完成时间倒序</span></div>
-      <div class="table-scroll" id="details-scroll" hidden>
-        <table>
-          <thead><tr><th>时间</th><th>Agent</th><th>模型</th><th>未缓存输入</th><th>缓存读取</th><th>输出</th><th>速度</th><th>总耗时</th></tr></thead>
-          <tbody id="request-details"></tbody>
-        </table>
+
+    <section class="table-panel" aria-label="消耗明细">
+      <div class="table-scroll" id="table-scroll">
+        <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
       </div>
-      <div class="empty" id="details-empty">正在读取请求明细…</div>
+      <div class="empty" id="empty" hidden>当前时间范围暂无用量记录</div>
     </section>
-    <footer>仅在本机读取 Kimi Code 用量元数据，不上传对话或代码。<br>页面每秒刷新；连续 15 分钟无访问后，本地服务自动停止。</footer>
+
+    <footer><span>仅读取本机 Kimi Code 用量元数据，不上传对话、代码或凭据。</span><span>每 5 秒自动刷新 · 总消耗 = 输入 + 输出 · 连续 15 分钟无访问后服务自动停止</span></footer>
   </main>
+
   <script>
     const byId = id => document.getElementById(id);
     const integer = new Intl.NumberFormat("zh-CN");
-    let refreshing = false;
-    let detailsKey = "";
+    const state = { range: "all", start: null, end: null, tab: "models", data: null, refreshing: false };
+    const pad = value => String(value).padStart(2, "0");
+    const isoDate = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const daysAgo = count => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() - count); return date; };
 
-    function setStatus(text, state) {
-      byId("status").textContent = text;
-      byId("dot").className = state === "ok" ? "dot" : `dot ${state}`;
+    function compact(value) {
+      const number = Number(value || 0);
+      const units = [[1e9, "B"], [1e6, "M"], [1e3, "k"]];
+      for (const [size, suffix] of units) {
+        if (Math.abs(number) >= size) return `${(number / size).toFixed(number >= size * 100 ? 1 : 2).replace(/\.0+$|(\.\d*[1-9])0+$/, "$1")}${suffix}`;
+      }
+      return integer.format(Math.round(number));
     }
-
-    function timeOf(milliseconds) {
-      return milliseconds ? new Date(milliseconds).toLocaleTimeString("zh-CN", { hour12: false }) : "--";
+    const percent = value => value == null ? "--" : `${Number(value).toFixed(1)}%`;
+    const speed = value => value == null ? "--" : Number(value).toFixed(1);
+    function dateTime(milliseconds) {
+      if (!milliseconds) return "--";
+      const date = new Date(milliseconds);
+      return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     }
-
     function modelName(value) {
-      if (!value) return "--";
+      if (!value) return "未知模型";
       const parts = value.split("/");
       return parts[parts.length - 1];
     }
 
-    function speedOf(value) {
-      return value == null ? "--" : `${value.toFixed(1)} tok/s`;
+    function setRange(range) {
+      state.range = range;
+      const today = isoDate(new Date());
+      if (range === "today") { state.start = today; state.end = today; }
+      if (range === "yesterday") { state.start = isoDate(daysAgo(1)); state.end = state.start; }
+      if (range === "7d") { state.start = isoDate(daysAgo(6)); state.end = today; }
+      if (range === "all") { state.start = null; state.end = null; }
+      if (range === "custom") {
+        state.start = byId("start-date").value;
+        state.end = byId("end-date").value;
+      }
+      document.querySelectorAll("[data-range]").forEach(button => button.classList.toggle("active", button.dataset.range === range));
+      updateRangeBadge();
     }
-
-    function durationOf(value) {
-      return value == null ? "--" : `${(value / 1000).toFixed(1)}s`;
+    function updateRangeBadge() {
+      byId("range-badge").textContent = state.range === "all" ? "全部时间" : `${state.start} ~ ${state.end}（含止日全天）`;
     }
-
-    function renderDetails(data) {
-      const key = `${data.sessionId}:${data.requestCount}:${data.lastUsageTime}`;
-      if (key === detailsKey) return;
-      detailsKey = key;
-      const records = Array.isArray(data.recentRequests) ? data.recentRequests : [];
+    function renderSummary(summary) {
+      byId("total-tokens").textContent = compact(summary.totalTokens);
+      byId("total-requests").textContent = integer.format(summary.requestCount);
+      byId("output-tokens").textContent = compact(summary.outputTokens);
+      byId("input-tokens").textContent = compact(summary.inputTokens);
+      byId("average-speed").textContent = speed(summary.speedTokensPerSecond);
+      byId("cache-hit").textContent = percent(summary.cacheHitPercent);
+      byId("cache-ring").style.setProperty("--percent", summary.cacheHitPercent || 0);
+      byId("cache-read").textContent = compact(summary.cacheReadTokens);
+      byId("uncached-input").textContent = compact(summary.uncachedInputTokens);
+      byId("session-count").textContent = summary.sessionCount;
+      byId("model-count").textContent = summary.modelCount;
+    }
+    function renderHeatmap(daily) {
+      const values = new Map(daily.map(item => [item.date, item]));
+      const end = state.end ? new Date(`${state.end}T12:00:00`) : new Date();
+      const days = [];
+      for (let offset = 99; offset >= 0; offset--) {
+        const date = new Date(end);
+        date.setDate(end.getDate() - offset);
+        days.push(isoDate(date));
+      }
+      const maximum = Math.max(0, ...daily.map(item => item.totalTokens));
       const fragment = document.createDocumentFragment();
-      for (const record of records) {
+      for (const day of days) {
+        const item = values.get(day);
+        const cell = document.createElement("div");
+        cell.className = "heat-cell";
+        const ratio = item && maximum ? item.totalTokens / maximum : 0;
+        cell.dataset.level = ratio === 0 ? "0" : ratio < .2 ? "1" : ratio < .45 ? "2" : ratio < .75 ? "3" : "4";
+        cell.title = item ? `${day}\n总消耗 ${integer.format(item.totalTokens)} tokens\n输出 ${integer.format(item.outputTokens)} tokens\n${integer.format(item.requestCount)} 次请求` : `${day}\n无用量记录`;
+        fragment.appendChild(cell);
+      }
+      byId("heatmap").replaceChildren(fragment);
+      const peak = daily.reduce((best, item) => !best || item.totalTokens > best.totalTokens ? item : best, null);
+      const average = days.length ? state.data.summary.totalTokens / days.length : 0;
+      byId("heat-summary").textContent = state.data.summary.requestCount ? `累计 ${compact(state.data.summary.totalTokens)} tok · 日均 ${compact(average)} · 峰值 ${peak.date.slice(5)}（${compact(peak.totalTokens)}）` : "暂无消耗记录";
+    }
+
+    const commonColumns = [
+      ["uncachedInputTokens", "未命中", compact], ["cacheReadTokens", "缓存命中", compact],
+      ["cacheHitPercent", "命中率", percent], ["outputTokens", "输出", compact],
+      ["totalTokens", "合计", "total"], ["requestCount", "请求", value => integer.format(value)],
+      ["speedTokensPerSecond", "平均 t/s", speed],
+    ];
+    function columns() {
+      if (state.tab === "models") return [["name", "模型", "name"], ...commonColumns, ["latestSpeedTokensPerSecond", "最近 t/s", speed], ["lastUsageTime", "最近使用", dateTime]];
+      if (state.tab === "sessions") return [["name", "会话", "session"], ["project", "项目", "text"], ...commonColumns, ["lastUsageTime", "最近使用", dateTime]];
+      return [["name", "项目", "name"], ["sessionCount", "会话数", value => integer.format(value)], ...commonColumns, ["lastUsageTime", "最近使用", dateTime]];
+    }
+    function appendCell(row, label, align = "right") {
+      const cell = document.createElement(label === "th" ? "th" : "td");
+      cell.style.textAlign = align;
+      row.appendChild(cell);
+      return cell;
+    }
+    function renderTable() {
+      const definitions = columns();
+      const head = byId("table-head");
+      head.replaceChildren();
+      definitions.forEach(([, label], index) => appendCell(head, "th", index < 2 ? "left" : "right").textContent = label);
+      const allRows = state.data ? state.data[state.tab] : [];
+      const rows = byId("show-all").checked ? allRows : allRows.slice(0, 20);
+      const maximum = Math.max(0, ...allRows.map(item => item.totalTokens));
+      const fragment = document.createDocumentFragment();
+      for (const item of rows) {
         const row = document.createElement("tr");
-        const values = [
-          timeOf(record.time),
-          record.agentId || "--",
-          modelName(record.model),
-          integer.format(record.uncachedInputTokens ?? 0),
-          integer.format(record.cacheReadTokens ?? 0),
-          integer.format(record.outputTokens ?? 0),
-          speedOf(record.speedTokensPerSecond),
-          durationOf(record.durationMs),
-        ];
-        values.forEach((value, index) => {
-          const cell = document.createElement("td");
-          cell.textContent = value;
-          if (index === 2) {
-            cell.className = "model";
-            cell.title = record.model || "";
+        definitions.forEach(([key, , format], index) => {
+          const cell = appendCell(row, "td", index < 2 ? "left" : "right");
+          if (format === "total") {
+            cell.className = "total-cell";
+            const value = document.createElement("span"); value.className = "total-value"; value.textContent = compact(item[key]);
+            const track = document.createElement("div"); track.className = "bar-track";
+            const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${maximum ? item[key] * 100 / maximum : 0}%`;
+            track.appendChild(fill); cell.append(value, track);
+          } else if (format === "name" || format === "session") {
+            cell.className = `name-cell${format === "session" ? " session" : ""}`;
+            cell.title = state.tab === "models" ? item.name : (item.workDir || item.name);
+            const primary = document.createElement("span"); primary.className = "primary"; primary.textContent = state.tab === "models" ? modelName(item.name) : item.name;
+            cell.appendChild(primary);
+            if (format === "session") { const secondary = document.createElement("span"); secondary.className = "secondary"; secondary.textContent = `…${item.sessionId.slice(-10)}`; cell.appendChild(secondary); }
+          } else {
+            cell.textContent = format === "text" ? (item[key] || "--") : format(item[key]);
           }
-          row.appendChild(cell);
+          if (key === "cacheHitPercent") cell.classList.add("hit");
         });
         fragment.appendChild(row);
       }
-      byId("request-details").replaceChildren(fragment);
-      byId("details-scroll").hidden = records.length === 0;
-      byId("details-empty").hidden = records.length > 0;
-      byId("details-empty").textContent = data.sessionFound ? "暂无请求明细" : "未发现会话";
+      byId("table-body").replaceChildren(fragment);
+      byId("table-scroll").hidden = rows.length === 0;
+      byId("empty").hidden = rows.length > 0;
     }
-
+    function render(data) {
+      state.data = data;
+      renderSummary(data.summary);
+      renderHeatmap(data.daily);
+      renderTable();
+    }
     async function refresh() {
-      if (refreshing) return;
-      refreshing = true;
+      if (state.refreshing) return;
+      state.refreshing = true;
+      byId("refresh").classList.add("loading");
       try {
-        const sessionId = new URLSearchParams(window.location.search).get("session");
-        const metricsUrl = sessionId ? `/api/metrics?session=${encodeURIComponent(sessionId)}` : "/api/metrics";
-        const response = await fetch(metricsUrl, { cache: "no-store" });
+        const query = state.start && state.end ? `?start=${state.start}&end=${state.end}` : "";
+        const response = await fetch(`/api/dashboard${query}`, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        byId("speed").textContent = data.speedTokensPerSecond == null ? "--" : data.speedTokensPerSecond.toFixed(1);
-        byId("cache").textContent = data.cacheHitPercent == null ? "--" : data.cacheHitPercent.toFixed(1);
-        byId("session").textContent = data.sessionId ? `会话 …${data.sessionId.slice(-10)}` : "未发现会话";
-        byId("requests").textContent = `${integer.format(data.requestCount)} 次请求`;
-        byId("tokens").textContent = `${integer.format(data.outputTokens)} 输出 token`;
-        renderDetails(data);
-        if (data.generating) {
-          setStatus("模型生成中 · 速度将在本次请求完成后更新", "busy");
-        } else if (data.lastUsageTime) {
-          setStatus(`最近用量记录 ${timeOf(data.lastUsageTime)} · 每秒刷新`, "ok");
-        } else {
-          setStatus("已连接 · 等待本次会话的用量记录", "busy");
-        }
+        render(await response.json());
+        byId("dot").className = "dot";
+        byId("status").textContent = `已连接 · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })} 更新`;
       } catch (error) {
-        setStatus("本地服务连接失败，正在重试…", "error");
+        byId("dot").className = "dot error";
+        byId("status").textContent = "本地服务连接失败，正在重试";
       } finally {
-        refreshing = false;
+        state.refreshing = false;
+        byId("refresh").classList.remove("loading");
       }
     }
 
+    byId("start-date").value = isoDate(daysAgo(6));
+    byId("end-date").value = isoDate(new Date());
+    byId("ranges").addEventListener("click", event => {
+      const range = event.target.dataset.range;
+      if (!range) return;
+      setRange(range);
+      if (range !== "custom") refresh();
+    });
+    byId("apply-range").addEventListener("click", () => {
+      if (!byId("start-date").value || !byId("end-date").value || byId("start-date").value > byId("end-date").value) {
+        byId("status").textContent = "请选择有效的开始和结束日期";
+        byId("dot").className = "dot error";
+        return;
+      }
+      setRange("custom");
+      refresh();
+    });
+    byId("tabs").addEventListener("click", event => {
+      if (!event.target.dataset.tab) return;
+      state.tab = event.target.dataset.tab;
+      document.querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === state.tab));
+      renderTable();
+    });
+    byId("show-all").addEventListener("change", renderTable);
+    byId("refresh").addEventListener("click", refresh);
+    byId("theme").addEventListener("click", () => {
+      const dark = document.documentElement.dataset.theme !== "dark";
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      byId("theme").textContent = dark ? "浅色" : "暗色";
+      localStorage.setItem("token-meter-theme", dark ? "dark" : "light");
+    });
+    if (localStorage.getItem("token-meter-theme") === "dark") {
+      document.documentElement.dataset.theme = "dark";
+      byId("theme").textContent = "浅色";
+    }
+    setRange("all");
     refresh();
-    setInterval(refresh, 1000);
+    setInterval(refresh, 5000);
   </script>
 </body>
 </html>

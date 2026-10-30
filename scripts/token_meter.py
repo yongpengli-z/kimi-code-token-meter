@@ -8,12 +8,13 @@ import sys
 import threading
 import time
 import urllib.request
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 PLUGIN_ID = "kimi-code-token-meter"
-VERSION = "1.4.1"
+VERSION = "2.0.0"
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
 DEFAULT_IDLE_TIMEOUT = 15 * 60
 RECENT_REQUEST_LIMIT = 100
@@ -216,10 +217,11 @@ class WireTail:
 
 
 class SessionMetrics:
-    def __init__(self, home, session_id=None, retain_history=True):
+    def __init__(self, home, session_id=None, retain_history=True, history_limit=REQUEST_HISTORY_RETENTION):
         self.home = home
         self.session_id = session_id
         self.retain_history = retain_history
+        self.history_limit = history_limit
         self.session_dir = None
         self.tails = {}
         self._clear_totals()
@@ -274,9 +276,9 @@ class SessionMetrics:
                 "speedTokensPerSecond": round(speed, 3) if speed is not None else None,
                 "durationMs": int(duration_ms) if duration_ms is not None else None,
             })
-            if len(self.request_history) > REQUEST_HISTORY_RETENTION * 2:
+            if self.history_limit is not None and len(self.request_history) > self.history_limit * 2:
                 self.request_history.sort(key=lambda item: item["time"])
-                self.request_history = self.request_history[-REQUEST_HISTORY_RETENTION:]
+                self.request_history = self.request_history[-self.history_limit:]
 
         if speed is not None and (
             self.latest_speed is None
@@ -417,7 +419,8 @@ class GlobalMetrics:
                 self.engines[directory] = SessionMetrics(
                     self.home,
                     directory.name,
-                    retain_history=False,
+                    retain_history=True,
+                    history_limit=None,
                 )
         records = []
         for directory, engine in self.engines.items():
@@ -454,6 +457,117 @@ class GlobalMetrics:
         self.cached_at = now
         return self.cached_snapshot
 
+    @staticmethod
+    def project_name(work_dir):
+        if not work_dir:
+            return "未记录项目"
+        normalized = work_dir.replace("\\", "/").rstrip("/")
+        return normalized.rsplit("/", 1)[-1] or normalized
+
+    @staticmethod
+    def aggregate(records):
+        input_tokens = sum(item["inputTokens"] for item in records)
+        output_tokens = sum(item["outputTokens"] for item in records)
+        cache_read = sum(item["cacheReadTokens"] for item in records)
+        timed = [item for item in records if item.get("durationMs")]
+        duration_ms = sum(item["durationMs"] for item in timed)
+        timed_output = sum(item["outputTokens"] for item in timed)
+        latest = max(records, key=lambda item: item["time"], default=None)
+        latest_timed = max(timed, key=lambda item: item["time"], default=None)
+        return {
+            "requestCount": len(records),
+            "inputTokens": input_tokens,
+            "uncachedInputTokens": sum(item["uncachedInputTokens"] for item in records),
+            "cacheReadTokens": cache_read,
+            "outputTokens": output_tokens,
+            "totalTokens": input_tokens + output_tokens,
+            "cacheHitPercent": round(cache_read * 100.0 / input_tokens, 3) if input_tokens else None,
+            "speedTokensPerSecond": round(timed_output * 1000.0 / duration_ms, 3) if duration_ms else None,
+            "latestSpeedTokensPerSecond": latest_timed.get("speedTokensPerSecond") if latest_timed else None,
+            "lastUsageTime": latest["time"] if latest else None,
+        }
+
+    def grouped_rows(self, records, key_function):
+        groups = {}
+        for record in records:
+            groups.setdefault(key_function(record), []).append(record)
+        rows = []
+        for key, items in groups.items():
+            row = self.aggregate(items)
+            row["key"] = key
+            rows.append(row)
+        rows.sort(key=lambda item: item["totalTokens"], reverse=True)
+        return rows
+
+    def dashboard(self, start_ms=None, end_ms=None):
+        self.poll()
+        records = []
+        for directory, engine in self.engines.items():
+            title, work_dir = session_metadata(directory)
+            for record in engine.request_history:
+                if start_ms is not None and record["time"] < start_ms:
+                    continue
+                if end_ms is not None and record["time"] >= end_ms:
+                    continue
+                item = dict(record)
+                item.update({
+                    "sessionId": directory.name,
+                    "title": title,
+                    "workDir": work_dir,
+                    "project": self.project_name(work_dir),
+                })
+                records.append(item)
+
+        summary = self.aggregate(records)
+        summary["sessionCount"] = len({item["sessionId"] for item in records})
+        summary["modelCount"] = len({item["model"] or "未知模型" for item in records})
+
+        daily_groups = {}
+        for record in records:
+            day = datetime.fromtimestamp(record["time"] / 1000.0).date().isoformat()
+            daily_groups.setdefault(day, []).append(record)
+        daily = []
+        for day, items in daily_groups.items():
+            row = self.aggregate(items)
+            row["date"] = day
+            daily.append(row)
+        daily.sort(key=lambda item: item["date"])
+
+        models = self.grouped_rows(records, lambda item: item["model"] or "未知模型")
+        for row in models:
+            row["name"] = row.pop("key")
+
+        sessions = self.grouped_rows(records, lambda item: item["sessionId"])
+        metadata = {item["sessionId"]: item for item in records}
+        for row in sessions:
+            session_id = row.pop("key")
+            item = metadata[session_id]
+            row.update({
+                "sessionId": session_id,
+                "name": item["title"],
+                "workDir": item["workDir"],
+                "project": item["project"],
+            })
+
+        projects = self.grouped_rows(records, lambda item: item["workDir"] or "")
+        for row in projects:
+            work_dir = row.pop("key")
+            items = [item for item in records if (item["workDir"] or "") == work_dir]
+            row.update({
+                "name": self.project_name(work_dir),
+                "workDir": work_dir or None,
+                "sessionCount": len({item["sessionId"] for item in items}),
+            })
+
+        return {
+            "summary": summary,
+            "daily": daily,
+            "models": models,
+            "sessions": sessions,
+            "projects": projects,
+            "serverTime": int(time.time() * 1000.0),
+        }
+
 
 class DashboardHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -477,6 +591,10 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             snapshot["global"] = self.global_metrics.poll()
             return snapshot
 
+    def dashboard_snapshot(self, start_ms, end_ms):
+        with self.metrics_lock:
+            return self.global_metrics.dashboard(start_ms, end_ms)
+
 
 class DashboardHandler(BaseHTTPRequestHandler):
     server_version = "KimiCodeTokenMeter/{}".format(VERSION)
@@ -499,6 +617,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         body = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_bytes(status, body, "application/json; charset=utf-8")
 
+    @staticmethod
+    def date_ms(value, end=False):
+        if value is None:
+            return None
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+        if end:
+            parsed += timedelta(days=1)
+        return int(parsed.timestamp() * 1000.0)
+
     def do_GET(self):
         expected_host = "127.0.0.1:{}".format(self.server.server_address[1])
         if self.headers.get("Host") != expected_host:
@@ -515,6 +642,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "invalid session id"}, status=400)
                 return
             self.send_json(self.server.metrics_snapshot(session_id))
+            return
+        if request.path == "/api/dashboard":
+            self.server.last_dashboard_poll = time.monotonic()
+            query = parse_qs(request.query)
+            try:
+                start_ms = self.date_ms(query.get("start", [None])[0])
+                end_ms = self.date_ms(query.get("end", [None])[0], end=True)
+                if start_ms is not None and end_ms is not None and start_ms >= end_ms:
+                    raise ValueError("开始日期不能晚于结束日期")
+            except ValueError as error:
+                self.send_json({"error": str(error)}, status=400)
+                return
+            self.send_json(self.server.dashboard_snapshot(start_ms, end_ms))
             return
         if request.path == "/":
             self.server.last_dashboard_poll = time.monotonic()
