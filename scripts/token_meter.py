@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 PLUGIN_ID = "kimi-code-token-meter"
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
 DEFAULT_IDLE_TIMEOUT = 15 * 60
 RECENT_REQUEST_LIMIT = 100

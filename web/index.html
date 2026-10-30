@@ -214,9 +214,9 @@
 
     <dialog id="pricing-dialog">
       <div class="pricing-content">
-        <div class="pricing-head"><div><h2>模型价目表</h2><p>人民币 / 百万 tokens，仅用于本地估算。缓存创建与普通输入统一按“未缓存输入”计价。</p></div><button id="close-pricing" class="tool-button" aria-label="关闭">×</button></div>
+        <div class="pricing-head"><div><h2>模型价目表</h2><p>默认来自 <a href="https://platform.moonshot.cn/docs/pricing/chat" target="_blank" rel="noreferrer">Kimi API 官方价目</a>（2026-10-30 核对），单位：人民币 / 百万 tokens。K3 缓存写入按默认 5 分钟档估算；不代表 Kimi Code 实际账单。</p></div><button id="close-pricing" class="tool-button" aria-label="关闭">×</button></div>
         <table class="pricing-table"><thead><tr><th>模型</th><th>未缓存输入</th><th>缓存读取</th><th>输出</th></tr></thead><tbody id="pricing-rows"></tbody></table>
-        <div class="pricing-actions"><button id="cancel-pricing" class="tool-button">取消</button><button id="save-pricing" class="primary-button">保存并重新计算</button></div>
+        <div class="pricing-actions"><button id="reset-pricing" class="tool-button">恢复官方价目</button><button id="cancel-pricing" class="tool-button">取消</button><button id="save-pricing" class="primary-button">保存并重新计算</button></div>
       </div>
     </dialog>
 
@@ -237,6 +237,14 @@
     const pad = value => String(value).padStart(2, "0");
     const isoDate = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
     const daysAgo = count => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() - count); return date; };
+    const OFFICIAL_PRICING = {
+      "kimi-k3.1-pro": { uncached: 13, cacheRead: 1.3, output: 68 },
+      "kimi-k3.1-pro-highspeed": { uncached: 26, cacheRead: 1.3, output: 136 },
+      "kimi-k3": { uncached: 20, cacheRead: 2, output: 100 },
+      "kimi-k2.7-code": { uncached: 6.5, cacheRead: 1.3, output: 27 },
+      "kimi-k2.7-code-highspeed": { uncached: 13, cacheRead: 2.6, output: 54 },
+      "kimi-k2.6": { uncached: 6.5, cacheRead: 1.1, output: 27 },
+    };
 
     function compact(value) {
       const number = Number(value || 0);
@@ -265,12 +273,20 @@
     function money(value) {
       return `¥${Number(value || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
+    function officialModelId(model) {
+      const name = modelName(model);
+      return name.startsWith("kimi-") ? name : `kimi-${name}`;
+    }
     function modelCost(item, prices = getPricing()) {
-      const rate = prices[item.name] || {};
+      const rate = rateForModel(item.name, prices);
       return (item.uncachedInputTokens * (rate.uncached || 0) + item.cacheReadTokens * (rate.cacheRead || 0) + item.outputTokens * (rate.output || 0)) / 1000000;
     }
     function isPriced(rate) {
       return Boolean(rate && (rate.uncached > 0 || rate.cacheRead > 0 || rate.output > 0));
+    }
+    function rateForModel(model, prices = getPricing()) {
+      const custom = prices[model];
+      return isPriced(custom) ? custom : (OFFICIAL_PRICING[officialModelId(model)] || {});
     }
     function openPricing() {
       if (!state.data) return;
@@ -282,12 +298,13 @@
         name.textContent = modelName(item.name);
         name.title = item.name;
         row.appendChild(name);
+        const rate = rateForModel(item.name, prices);
         for (const kind of ["uncached", "cacheRead", "output"]) {
           const cell = document.createElement("td");
           const input = document.createElement("input");
           input.type = "number"; input.min = "0"; input.step = "0.01"; input.placeholder = "0.00";
           input.dataset.model = item.name; input.dataset.kind = kind;
-          input.value = prices[item.name]?.[kind] || "";
+          input.value = rate[kind] || "";
           input.setAttribute("aria-label", `${modelName(item.name)} ${kind} 单价`);
           cell.appendChild(input); row.appendChild(cell);
         }
@@ -338,7 +355,7 @@
       const prices = getPricing();
       const models = state.data ? state.data.models : [];
       byId("estimated-cost").textContent = money(models.reduce((total, item) => total + modelCost(item, prices), 0));
-      byId("priced-models").textContent = models.filter(item => isPriced(prices[item.name])).length;
+      byId("priced-models").textContent = models.filter(item => isPriced(rateForModel(item.name, prices))).length;
       byId("session-count").textContent = summary.sessionCount;
       byId("model-count").textContent = summary.modelCount;
     }
@@ -477,6 +494,12 @@
     byId("refresh").addEventListener("click", refresh);
     byId("pricing").addEventListener("click", openPricing);
     byId("save-pricing").addEventListener("click", savePricing);
+    byId("reset-pricing").addEventListener("click", () => {
+      localStorage.removeItem("token-meter-pricing");
+      byId("pricing-dialog").close();
+      if (state.data) render(state.data);
+      openPricing();
+    });
     byId("close-pricing").addEventListener("click", () => byId("pricing-dialog").close());
     byId("cancel-pricing").addEventListener("click", () => byId("pricing-dialog").close());
     byId("theme").addEventListener("click", () => {

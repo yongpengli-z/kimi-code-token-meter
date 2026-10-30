@@ -1,6 +1,6 @@
 {
   "name": "kimi-code-token-meter",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "在 Kimi Code App 内置浏览器中展示 token 用量、速度、缓存命中率、估算花费和每日消耗热力图",
   "interface": {
     "displayName": "Kimi Code Token Meter",
