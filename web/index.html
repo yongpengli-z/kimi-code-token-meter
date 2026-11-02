@@ -337,6 +337,9 @@
       if (range === "custom") {
         state.start = byId("start-date").value;
         state.end = byId("end-date").value;
+      } else if (range !== "all") {
+        byId("start-date").value = state.start;
+        byId("end-date").value = state.end;
       }
       document.querySelectorAll("[data-range]").forEach(button => button.classList.toggle("active", button.dataset.range === range));
       updateRangeBadge();
@@ -363,6 +366,11 @@
       const values = new Map(daily.map(item => [item.date, item]));
       const start = state.start || daily[0]?.date || isoDate(new Date());
       const end = state.end || daily[daily.length - 1]?.date || start;
+      if (state.range === "all") {
+        byId("start-date").value = start;
+        byId("end-date").value = end;
+        byId("range-badge").textContent = daily.length ? `全部时间 · ${start} ~ ${end}` : "全部时间";
+      }
       const cursor = new Date(`${start}T12:00:00`);
       const last = new Date(`${end}T12:00:00`);
       const days = [];
