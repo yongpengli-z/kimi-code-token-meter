@@ -174,15 +174,6 @@
       <article class="card"><div class="label">统计范围</div><div class="value small"><span id="session-count">0</span>&nbsp;会话 ·&nbsp;<span id="model-count">0</span>&nbsp;模型</div><div class="note">非归档本地会话 · 包含主 Agent 与子 Agent</div></article>
     </section>
 
-    <section class="panel" aria-label="每日消耗热力图">
-      <div class="panel-heading">
-        <div><div class="panel-title">每日消耗热力图</div><div class="panel-note">近 100 天 · 悬停查看当日明细</div></div>
-        <div class="heat-summary" id="heat-summary">暂无消耗记录</div>
-      </div>
-      <div class="heatmap-wrap"><div id="heatmap" class="heatmap"></div></div>
-      <div class="heat-legend">少 <i class="heat-cell" data-level="0"></i><i class="heat-cell" data-level="1"></i><i class="heat-cell" data-level="2"></i><i class="heat-cell" data-level="3"></i><i class="heat-cell" data-level="4"></i> 多</div>
-    </section>
-
     <section class="filters" aria-label="看板筛选">
       <div class="filter-row">
         <div class="segmented" id="ranges">
@@ -210,6 +201,15 @@
         <button id="theme" class="tool-button">暗色</button>
         <button id="refresh" class="tool-button">↻ 重新扫描</button>
       </div>
+    </section>
+
+    <section class="panel" aria-label="每日消耗热力图">
+      <div class="panel-heading">
+        <div><div class="panel-title">每日消耗热力图</div><div class="panel-note">近 100 天 · 悬停查看当日明细</div></div>
+        <div class="heat-summary" id="heat-summary">暂无消耗记录</div>
+      </div>
+      <div class="heatmap-wrap"><div id="heatmap" class="heatmap"></div></div>
+      <div class="heat-legend">少 <i class="heat-cell" data-level="0"></i><i class="heat-cell" data-level="1"></i><i class="heat-cell" data-level="2"></i><i class="heat-cell" data-level="3"></i><i class="heat-cell" data-level="4"></i> 多</div>
     </section>
 
     <dialog id="pricing-dialog">
