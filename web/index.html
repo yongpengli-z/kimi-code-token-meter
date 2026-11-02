@@ -205,7 +205,7 @@
 
     <section class="panel" aria-label="每日消耗热力图">
       <div class="panel-heading">
-        <div><div class="panel-title">每日消耗热力图</div><div class="panel-note">近 100 天 · 悬停查看当日明细</div></div>
+        <div><div class="panel-title">每日消耗热力图</div><div class="panel-note" id="heatmap-note">按时间范围展示 · 悬停查看当日明细</div></div>
         <div class="heat-summary" id="heat-summary">暂无消耗记录</div>
       </div>
       <div class="heatmap-wrap"><div id="heatmap" class="heatmap"></div></div>
@@ -361,12 +361,14 @@
     }
     function renderHeatmap(daily) {
       const values = new Map(daily.map(item => [item.date, item]));
-      const end = state.end ? new Date(`${state.end}T12:00:00`) : new Date();
+      const start = state.start || daily[0]?.date || isoDate(new Date());
+      const end = state.end || daily[daily.length - 1]?.date || start;
+      const cursor = new Date(`${start}T12:00:00`);
+      const last = new Date(`${end}T12:00:00`);
       const days = [];
-      for (let offset = 99; offset >= 0; offset--) {
-        const date = new Date(end);
-        date.setDate(end.getDate() - offset);
-        days.push(isoDate(date));
+      while (cursor <= last) {
+        days.push(isoDate(cursor));
+        cursor.setDate(cursor.getDate() + 1);
       }
       const maximum = Math.max(0, ...daily.map(item => item.totalTokens));
       const fragment = document.createDocumentFragment();
@@ -379,7 +381,11 @@
         cell.title = item ? `${day}\n总消耗 ${integer.format(item.totalTokens)} tokens\n输出 ${integer.format(item.outputTokens)} tokens\n${integer.format(item.requestCount)} 次请求` : `${day}\n无用量记录`;
         fragment.appendChild(cell);
       }
-      byId("heatmap").replaceChildren(fragment);
+      const heatmap = byId("heatmap");
+      heatmap.replaceChildren(fragment);
+      heatmap.style.gridTemplateColumns = `repeat(${Math.min(25, days.length)}, minmax(12px, 1fr))`;
+      heatmap.style.maxWidth = days.length < 7 ? `${days.length * 44}px` : "";
+      byId("heatmap-note").textContent = `${days.length} 天 · 悬停查看当日明细`;
       const peak = daily.reduce((best, item) => !best || item.totalTokens > best.totalTokens ? item : best, null);
       const average = days.length ? state.data.summary.totalTokens / days.length : 0;
       byId("heat-summary").textContent = state.data.summary.requestCount ? `累计 ${compact(state.data.summary.totalTokens)} tok · 日均 ${compact(average)} · 峰值 ${peak.date.slice(5)}（${compact(peak.totalTokens)}）` : "暂无消耗记录";
